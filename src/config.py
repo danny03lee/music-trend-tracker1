@@ -14,6 +14,11 @@ DEFAULT_REGIONS: dict[str, str] = {
     "United Kingdom": "united kingdom",
     "Japan": "japan",
     "Brazil": "brazil",
+    "Germany": "germany",
+    "France": "france",
+    "South Korea": "south korea",
+    "Australia": "australia",
+    "Mexico": "mexico",
 }
 
 DEFAULT_DB_PATH = "music_trends.db"

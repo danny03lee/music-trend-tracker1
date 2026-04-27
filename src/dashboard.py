@@ -168,8 +168,16 @@ def render_global_vs_regional(conn, regions, start_week, end_week, genres):
 
     # Heatmap-style pivot
     pivot = cross.pivot_table(index="track_name", columns="region", values="rank", aggfunc="first")
+
+    # Order columns: Global first, then alphabetical
+    ordered_cols = []
+    if "Global" in pivot.columns:
+        ordered_cols.append("Global")
+    ordered_cols += sorted([c for c in pivot.columns if c != "Global"])
+    pivot = pivot[ordered_cols]
     pivot = pivot.sort_values(by=pivot.columns.tolist(), ascending=True)
 
+    st.caption("Numbers show chart rank in each region (lower = higher on the chart). '—' means not in the top 50.")
     st.dataframe(pivot.fillna("—"), use_container_width=True, height=400)
 
     # Bar chart: how many regions each track appears in
