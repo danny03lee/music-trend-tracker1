@@ -1,4 +1,4 @@
-name: Weekly Spotify Trend Tracker
+name: Weekly Music Trend Tracker
 
 on:
   schedule:
@@ -23,9 +23,8 @@ jobs:
 
       - name: Run pipeline
         env:
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
-        run: python src/pipeline.py
+        run: python -m src.pipeline
