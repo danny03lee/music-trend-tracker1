@@ -6,6 +6,7 @@ logs and skips per-track / per-artist errors.
 """
 
 import logging
+import re
 
 import requests
 
@@ -104,17 +105,35 @@ def extract_track_info(api_key: str, tracks: list[dict]) -> list[dict]:
         artist_name = entry["artist_id"]
         track_name = entry["track_name"]
 
-        try:
-            params = {
-                "method": "track.getInfo",
-                "artist": artist_name,
-                "track": track_name,
-                "api_key": api_key,
-                "format": "json",
-            }
-            data = _lastfm_get(params)
-            track_data = data.get("track", {})
+        # Build a list of track name variants to try
+        name_variants = [track_name]
+        # Strip featured artists: "Song + Artist2", "Song (feat. Artist2)", "Song (ft. Artist2)"
+        for pattern in [r"\s*\+\s*.+$", r"\s*\(feat\.?\s*.+\)$", r"\s*\(ft\.?\s*.+\)$", r"\s*feat\.?\s*.+$", r"\s*ft\.?\s*.+$"]:
+            stripped = re.sub(pattern, "", track_name, flags=re.IGNORECASE).strip()
+            if stripped and stripped != track_name:
+                name_variants.append(stripped)
 
+        track_data = None
+        for variant in name_variants:
+            try:
+                params = {
+                    "method": "track.getInfo",
+                    "artist": artist_name,
+                    "track": variant,
+                    "api_key": api_key,
+                    "format": "json",
+                }
+                data = _lastfm_get(params)
+                track_data = data.get("track", {})
+                break  # found it
+            except Exception:
+                continue
+
+        if track_data is None:
+            logger.debug("Track not found after retries: %s", track_id)
+            continue
+
+        try:
             tag_list = track_data.get("toptags", {}).get("tag", [])
             tags = [t["name"] for t in tag_list if isinstance(t, dict) and "name" in t]
 
@@ -126,7 +145,7 @@ def extract_track_info(api_key: str, tracks: list[dict]) -> list[dict]:
                 "tags": tags,
             })
         except Exception as exc:
-            logger.error("Error fetching track info for %s: %s", track_id, exc)
+            logger.debug("Error processing track info for %s: %s", track_id, exc)
             continue
 
     return results
