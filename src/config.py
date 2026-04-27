@@ -16,7 +16,7 @@ DEFAULT_REGIONS: dict[str, str] = {
     "Brazil": "brazil",
     "Germany": "germany",
     "France": "france",
-    "South Korea": "south korea",
+    "Canada": "canada",
     "Australia": "australia",
     "Mexico": "mexico",
 }
