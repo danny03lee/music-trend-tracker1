@@ -1,77 +1,50 @@
-"""Centralized configuration module for Music Trend Tracker.
-
-Reads defaults and supports overrides via environment variables.
-Raises ValueError if required configuration values are missing.
-"""
+"""Configuration for Spotify Music Tracker."""
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from pathlib import Path
 
+from dotenv import load_dotenv
 
-DEFAULT_REGIONS: dict[str, str] = {
-    "Global": "global",
-    "United States": "united states",
-    "United Kingdom": "united kingdom",
-    "Japan": "japan",
-    "Brazil": "brazil",
-    "Germany": "germany",
-    "France": "france",
-    "Canada": "canada",
-    "Australia": "australia",
-    "Mexico": "mexico",
-}
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-DEFAULT_DB_PATH = "music_trends.db"
-DEFAULT_S3_KEY_PREFIX = "music-trends"
+DEFAULT_DB_PATH = "spotify_tracker.db"
+
+SCOPES = [
+    "user-read-recently-played",
+    "user-top-read",
+    "user-read-currently-playing",
+    "user-library-read",
+    "playlist-read-private",
+    "playlist-read-collaborative",
+]
 
 
 @dataclass
 class Config:
-    """Pipeline configuration container."""
-
-    lastfm_api_key: str
-    s3_bucket: str
-    s3_key_prefix: str = DEFAULT_S3_KEY_PREFIX
-    regions: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_REGIONS))
+    client_id: str
+    client_secret: str
+    redirect_uri: str
     db_path: str = DEFAULT_DB_PATH
 
 
 def load_config() -> Config:
-    """Load configuration from defaults, overridable via environment variables.
-
-    Environment variables:
-        LASTFM_API_KEY  – (required) Last.fm API key
-        S3_BUCKET       – (required) S3 bucket name for backups
-        S3_KEY_PREFIX   – S3 key prefix (default: "music-trends")
-        DB_PATH         – SQLite database path (default: "music_trends.db")
-
-    Returns:
-        A fully populated Config instance.
-
-    Raises:
-        ValueError: If any required configuration value is missing.
-    """
-    lastfm_api_key = os.environ.get("LASTFM_API_KEY", "")
-    s3_bucket = os.environ.get("S3_BUCKET", "")
-    s3_key_prefix = os.environ.get("S3_KEY_PREFIX", DEFAULT_S3_KEY_PREFIX)
+    client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
+    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+    redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback")
     db_path = os.environ.get("DB_PATH", DEFAULT_DB_PATH)
 
-    missing: list[str] = []
-    if not lastfm_api_key:
-        missing.append("LASTFM_API_KEY")
-    if not s3_bucket:
-        missing.append("S3_BUCKET")
-
+    missing = []
+    if not client_id:
+        missing.append("SPOTIFY_CLIENT_ID")
+    if not client_secret:
+        missing.append("SPOTIFY_CLIENT_SECRET")
     if missing:
-        raise ValueError(
-            f"Missing required configuration value(s): {', '.join(missing)}. "
-            "Set them as environment variables."
-        )
+        raise ValueError(f"Missing: {', '.join(missing)}. Set them in .env or environment.")
 
     return Config(
-        lastfm_api_key=lastfm_api_key,
-        s3_bucket=s3_bucket,
-        s3_key_prefix=s3_key_prefix,
-        regions=dict(DEFAULT_REGIONS),
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
         db_path=db_path,
     )

@@ -1,71 +1,33 @@
-"""Tests for src.config module."""
+"""Tests for Spotify config module."""
 
 import pytest
-from src.config import Config, load_config, DEFAULT_REGIONS, DEFAULT_DB_PATH, DEFAULT_S3_KEY_PREFIX
+from src.config import Config, load_config
 
 
 @pytest.fixture
-def required_env(monkeypatch):
-    monkeypatch.setenv("LASTFM_API_KEY", "test-api-key")
-    monkeypatch.setenv("S3_BUCKET", "my-bucket")
+def spotify_env(monkeypatch):
+    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test-id")
+    monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback")
 
 
-class TestLoadConfigSuccess:
-    def test_loads_with_required_env_vars(self, required_env):
+class TestLoadConfig:
+    def test_loads_with_env(self, spotify_env):
         cfg = load_config()
-        assert cfg.lastfm_api_key == "test-api-key"
-        assert cfg.s3_bucket == "my-bucket"
+        assert cfg.client_id == "test-id"
+        assert cfg.client_secret == "test-secret"
 
-    def test_default_regions(self, required_env):
+    def test_missing_client_id_raises(self, monkeypatch):
+        monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
+        monkeypatch.delenv("SPOTIFY_CLIENT_SECRET", raising=False)
+        with pytest.raises(ValueError, match="SPOTIFY_CLIENT_ID"):
+            load_config()
+
+    def test_default_db_path(self, spotify_env):
         cfg = load_config()
-        assert cfg.regions == DEFAULT_REGIONS
-        assert len(cfg.regions) == 5
+        assert cfg.db_path == "spotify_tracker.db"
 
-    def test_default_db_path(self, required_env):
-        cfg = load_config()
-        assert cfg.db_path == DEFAULT_DB_PATH
-
-    def test_default_s3_key_prefix(self, required_env):
-        cfg = load_config()
-        assert cfg.s3_key_prefix == DEFAULT_S3_KEY_PREFIX
-
-    def test_env_overrides_db_path(self, required_env, monkeypatch):
+    def test_custom_db_path(self, spotify_env, monkeypatch):
         monkeypatch.setenv("DB_PATH", "/tmp/custom.db")
         cfg = load_config()
         assert cfg.db_path == "/tmp/custom.db"
-
-    def test_env_overrides_s3_key_prefix(self, required_env, monkeypatch):
-        monkeypatch.setenv("S3_KEY_PREFIX", "custom-prefix")
-        cfg = load_config()
-        assert cfg.s3_key_prefix == "custom-prefix"
-
-
-class TestLoadConfigMissingValues:
-    def test_missing_api_key_raises(self, monkeypatch):
-        monkeypatch.setenv("S3_BUCKET", "bucket")
-        monkeypatch.delenv("LASTFM_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="LASTFM_API_KEY"):
-            load_config()
-
-    def test_missing_s3_bucket_raises(self, monkeypatch):
-        monkeypatch.setenv("LASTFM_API_KEY", "key")
-        monkeypatch.delenv("S3_BUCKET", raising=False)
-        with pytest.raises(ValueError, match="S3_BUCKET"):
-            load_config()
-
-    def test_missing_multiple_values_lists_all(self, monkeypatch):
-        monkeypatch.delenv("LASTFM_API_KEY", raising=False)
-        monkeypatch.delenv("S3_BUCKET", raising=False)
-        with pytest.raises(ValueError) as exc_info:
-            load_config()
-        msg = str(exc_info.value)
-        assert "LASTFM_API_KEY" in msg
-        assert "S3_BUCKET" in msg
-
-
-class TestConfigDataclass:
-    def test_config_fields(self):
-        cfg = Config(lastfm_api_key="key", s3_bucket="bucket")
-        assert cfg.lastfm_api_key == "key"
-        assert cfg.db_path == DEFAULT_DB_PATH
-        assert cfg.regions == DEFAULT_REGIONS

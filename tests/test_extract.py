@@ -1,117 +1,144 @@
-"""Tests for src.extract module."""
+"""Tests for Spotify extraction module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from src.extract import ExtractionError, extract_chart_data, extract_track_info, extract_artist_metadata
-
-
-def _geo_response(tracks):
-    return {"tracks": {"track": tracks}}
-
-
-def _track(name, artist):
-    return {"name": name, "artist": {"name": artist}}
+from src.extract import (
+    extract_audio_features,
+    extract_currently_playing,
+    extract_global_charts,
+    extract_recently_played,
+    extract_top_items,
+    extract_user_playlists,
+)
 
 
-class TestExtractChartData:
-    @patch("src.extract.requests.get")
-    def test_extracts_multiple_regions(self, mock_get):
-        resp1 = MagicMock()
-        resp1.json.return_value = _geo_response([_track("Song1", "A1"), _track("Song2", "A2")])
-        resp1.raise_for_status = MagicMock()
-        resp2 = MagicMock()
-        resp2.json.return_value = _geo_response([_track("Song3", "A3")])
-        resp2.raise_for_status = MagicMock()
-        mock_get.side_effect = [resp1, resp2]
+def _make_track(track_id="abc123", name="Test Song", artist="Test Artist"):
+    return {
+        "id": track_id,
+        "name": name,
+        "artists": [{"id": "art1", "name": artist}],
+        "album": {
+            "id": "alb1",
+            "name": "Test Album",
+            "images": [{"url": "https://img.example.com/art.jpg"}],
+        },
+        "duration_ms": 210000,
+        "popularity": 72,
+        "preview_url": "https://preview.example.com/test.mp3",
+    }
 
-        result = extract_chart_data("key", {"US": "united states", "UK": "united kingdom"})
-        assert len(result) == 3
-        assert result[0]["region"] == "US"
+
+class TestExtractRecentlyPlayed:
+    def test_parses_items(self):
+        sp = MagicMock()
+        sp.current_user_recently_played.return_value = {
+            "items": [{"played_at": "2025-06-01T12:00:00Z", "track": _make_track()}]
+        }
+        result = extract_recently_played(sp)
+        assert len(result) == 1
+        assert result[0]["track_name"] == "Test Song"
+        assert result[0]["artist_name"] == "Test Artist"
+        assert result[0]["album_art_url"] == "https://img.example.com/art.jpg"
+
+    def test_empty_response(self):
+        sp = MagicMock()
+        sp.current_user_recently_played.return_value = {"items": []}
+        assert extract_recently_played(sp) == []
+
+
+class TestExtractTopItems:
+    def test_top_tracks(self):
+        sp = MagicMock()
+        sp.current_user_top_tracks.return_value = {"items": [_make_track()]}
+        result = extract_top_items(sp, item_type="tracks", time_range="short_term")
+        assert len(result) == 1
         assert result[0]["rank"] == 1
-        assert result[0]["track_id"] == "A1::Song1"
+        assert result[0]["time_range"] == "short_term"
 
-    @patch("src.extract.requests.get")
-    def test_global_uses_chart_endpoint(self, mock_get):
-        resp = MagicMock()
-        resp.json.return_value = _geo_response([_track("Hit", "Star")])
-        resp.raise_for_status = MagicMock()
-        mock_get.return_value = resp
-
-        extract_chart_data("key", {"Global": "global"})
-        call_params = mock_get.call_args[1]["params"]
-        assert call_params["method"] == "chart.getTopTracks"
-
-    @patch("src.extract.requests.get")
-    def test_raises_extraction_error_on_failure(self, mock_get):
-        mock_get.side_effect = Exception("network error")
-        with pytest.raises(ExtractionError, match="US"):
-            extract_chart_data("key", {"US": "united states"})
-
-    @patch("src.extract.requests.get")
-    def test_empty_response(self, mock_get):
-        resp = MagicMock()
-        resp.json.return_value = {"tracks": {"track": []}}
-        resp.raise_for_status = MagicMock()
-        mock_get.return_value = resp
-        result = extract_chart_data("key", {"US": "united states"})
-        assert result == []
-
-
-class TestExtractTrackInfo:
-    @patch("src.extract._lastfm_get")
-    def test_returns_track_info(self, mock_get):
-        mock_get.return_value = {
-            "track": {
-                "listeners": "1000", "playcount": "5000", "duration": "240000",
-                "toptags": {"tag": [{"name": "pop"}, {"name": "rock"}]},
-            }
+    def test_top_artists(self):
+        sp = MagicMock()
+        sp.current_user_top_artists.return_value = {
+            "items": [{
+                "id": "art1", "name": "Cool Artist",
+                "genres": ["indie", "rock"],
+                "popularity": 85,
+                "followers": {"total": 500000},
+                "images": [{"url": "https://img.example.com/artist.jpg"}],
+            }]
         }
-        tracks = [{"track_id": "A::S", "track_name": "S", "artist_id": "A"}]
-        result = extract_track_info("key", tracks)
+        result = extract_top_items(sp, item_type="artists", time_range="long_term")
         assert len(result) == 1
-        assert result[0]["listeners"] == 1000
-        assert result[0]["tags"] == ["pop", "rock"]
+        assert result[0]["artist_name"] == "Cool Artist"
+        assert result[0]["genres"] == ["indie", "rock"]
 
-    @patch("src.extract._lastfm_get")
-    def test_skips_on_error(self, mock_get):
-        mock_get.side_effect = Exception("fail")
-        tracks = [{"track_id": "A::S", "track_name": "S", "artist_id": "A"}]
-        result = extract_track_info("key", tracks)
-        assert result == []
 
-    @patch("src.extract._lastfm_get")
-    def test_deduplicates(self, mock_get):
-        mock_get.return_value = {
-            "track": {"listeners": "100", "playcount": "500", "duration": "200000", "toptags": {"tag": []}}
+class TestExtractAudioFeatures:
+    def test_parses_features(self):
+        sp = MagicMock()
+        sp.audio_features.return_value = [{
+            "id": "abc123",
+            "danceability": 0.8,
+            "energy": 0.7,
+            "valence": 0.6,
+            "tempo": 120.0,
+            "acousticness": 0.1,
+            "instrumentalness": 0.0,
+            "speechiness": 0.05,
+            "liveness": 0.15,
+            "loudness": -5.0,
+            "key": 7,
+            "mode": 1,
+            "time_signature": 4,
+        }]
+        result = extract_audio_features(sp, ["abc123"])
+        assert len(result) == 1
+        assert result[0]["danceability"] == 0.8
+        assert result[0]["tempo"] == 120.0
+
+    def test_skips_none(self):
+        sp = MagicMock()
+        sp.audio_features.return_value = [None, None]
+        assert extract_audio_features(sp, ["a", "b"]) == []
+
+
+class TestExtractGlobalCharts:
+    def test_fetches_multiple_regions(self):
+        sp = MagicMock()
+        sp.playlist_tracks.return_value = {
+            "items": [{"track": _make_track("t1", "Hit Song", "Pop Star")}]
         }
-        tracks = [
-            {"track_id": "A::S", "track_name": "S", "artist_id": "A"},
-            {"track_id": "A::S", "track_name": "S", "artist_id": "A"},
-        ]
-        result = extract_track_info("key", tracks)
-        assert len(result) == 1
-        assert mock_get.call_count == 1
+        result = extract_global_charts(sp, ["Global", "United States"])
+        assert "Global" in result
+        assert "United States" in result
+        assert result["Global"][0]["rank"] == 1
+        assert result["Global"][0]["track_name"] == "Hit Song"
+
+    def test_skips_unknown_region(self):
+        sp = MagicMock()
+        result = extract_global_charts(sp, ["Narnia"])
+        assert result == {}
+
+    def test_handles_api_error(self):
+        sp = MagicMock()
+        sp.playlist_tracks.side_effect = Exception("rate limited")
+        result = extract_global_charts(sp, ["Global"])
+        assert result == {}
 
 
-class TestExtractArtistMetadata:
-    @patch("src.extract._lastfm_get")
-    def test_returns_metadata(self, mock_get):
-        mock_get.return_value = {
-            "artist": {
-                "name": "Artist One",
-                "tags": {"tag": [{"name": "pop"}]},
-                "stats": {"listeners": "50000", "playcount": "1000000"},
-            }
+class TestExtractUserPlaylists:
+    def test_parses_playlists(self):
+        sp = MagicMock()
+        sp.user_playlists.return_value = {
+            "items": [{
+                "id": "pl1", "name": "Chill Vibes",
+                "description": "Relaxing tunes",
+                "tracks": {"total": 42},
+                "images": [{"url": "https://img.example.com/pl.jpg"}],
+                "owner": {"display_name": "someone"},
+                "public": True,
+            }]
         }
-        result = extract_artist_metadata("key", ["Artist One"])
+        result = extract_user_playlists(sp, "someone")
         assert len(result) == 1
-        assert result[0]["artist_id"] == "Artist One"
-        assert result[0]["genres"] == ["pop"]
-        assert result[0]["followers"] == 50000
-
-    @patch("src.extract._lastfm_get")
-    def test_skips_on_error(self, mock_get):
-        mock_get.side_effect = Exception("fail")
-        result = extract_artist_metadata("key", ["Bad Artist"])
-        assert result == []
+        assert result[0]["name"] == "Chill Vibes"
+        assert result[0]["track_count"] == 42

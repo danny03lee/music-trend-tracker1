@@ -1,66 +1,53 @@
-"""Tests for src/database.py."""
+"""Tests for database module."""
 
 import sqlite3
-import pandas as pd
+import tempfile
+import os
+
 import pytest
-from src.database import get_connection, get_previous_weeks_data, initialize_schema
+
+from src.database import get_connection, initialize_schema, get_listening_history, get_top_tracks
 
 
-class TestGetConnection:
-    def test_returns_sqlite_connection(self, tmp_path):
-        conn = get_connection(str(tmp_path / "test.db"))
-        assert isinstance(conn, sqlite3.Connection)
+@pytest.fixture
+def db_path():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "test.db")
+        conn = get_connection(path)
+        initialize_schema(conn)
+        conn.close()
+        yield path
+
+
+class TestSchema:
+    def test_creates_tables(self, db_path):
+        conn = sqlite3.connect(db_path)
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        table_names = {t[0] for t in tables}
+        assert "listening_history" in table_names
+        assert "top_tracks" in table_names
+        assert "top_artists" in table_names
+        assert "audio_features" in table_names
+        assert "saved_tracks" in table_names
         conn.close()
 
 
-class TestInitializeSchema:
-    def test_creates_all_three_tables(self, tmp_path):
-        conn = get_connection(str(tmp_path / "test.db"))
-        initialize_schema(conn)
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        assert "charts" in tables
-        assert "track_info" in tables
-        assert "artists" in tables
+class TestGetListeningHistory:
+    def test_empty_db(self, db_path):
+        conn = get_connection(db_path)
+        df = get_listening_history(conn)
+        assert df.empty
         conn.close()
 
-    def test_track_info_columns(self, tmp_path):
-        conn = get_connection(str(tmp_path / "test.db"))
-        initialize_schema(conn)
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(track_info)").fetchall()]
-        assert cols == ["track_id", "listeners", "playcount", "duration", "tags"]
-        conn.close()
-
-    def test_idempotent(self, tmp_path):
-        conn = get_connection(str(tmp_path / "test.db"))
-        initialize_schema(conn)
-        initialize_schema(conn)
-        conn.close()
-
-
-class TestGetPreviousWeeksData:
-    @pytest.fixture()
-    def conn(self, tmp_path):
-        c = get_connection(str(tmp_path / "test.db"))
-        initialize_schema(c)
-        yield c
-        c.close()
-
-    def _insert(self, conn, week, region, rank, track_id):
-        conn.execute("INSERT INTO charts (week,region,rank,track_id,track_name,artist_id) VALUES (?,?,?,?,?,?)",
-                      (week, region, rank, track_id, "t", "a"))
+    def test_returns_data(self, db_path):
+        conn = get_connection(db_path)
+        conn.execute(
+            "INSERT INTO listening_history VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2025-06-01T12:00:00Z", "t1", "Song", "a1", "Artist",
+             "alb1", "Album", "", 200000, 70, ""),
+        )
         conn.commit()
-
-    def test_empty(self, conn):
-        assert get_previous_weeks_data(conn, "US").empty
-
-    def test_filters_by_region(self, conn):
-        self._insert(conn, "2025-01-06", "US", 1, "t1")
-        self._insert(conn, "2025-01-06", "UK", 1, "t2")
-        df = get_previous_weeks_data(conn, "US")
+        df = get_listening_history(conn)
         assert len(df) == 1
-
-    def test_limits_weeks(self, conn):
-        for i, w in enumerate(["2025-01-06", "2025-01-13", "2025-01-20", "2025-01-27"]):
-            self._insert(conn, w, "US", 1, f"t{i}")
-        df = get_previous_weeks_data(conn, "US", n_weeks=2)
-        assert len(df["week"].unique()) == 2
+        assert df.iloc[0]["track_name"] == "Song"
+        conn.close()

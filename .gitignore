@@ -1,4 +1,8 @@
 .env
+.cache*
+.spotify_cache
 __pycache__/
 .pytest_cache/
 .venv/
+*.pyc
+*.db

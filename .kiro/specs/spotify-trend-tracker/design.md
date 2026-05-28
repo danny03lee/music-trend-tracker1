@@ -10,7 +10,7 @@ The Spotify Global Trend Tracker is a Python-based ETL pipeline with an interact
 
 2. **Audio Features API Access**: As of November 2024, Spotify restricted the Audio Features endpoint for new apps ([source](https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api)). The design assumes the app has existing extended mode access. If unavailable, the pipeline gracefully degrades by storing null audio features and logging a warning.
 
-3. **Client Credentials Flow**: The pipeline accesses only public data (playlists, tracks, artists). Client Credentials authentication via Spotipy is sufficient — no user OAuth flow is needed.
+3. **Client Credentials Flow**: The pipeline accesses only public data (playlists, tracks, artists). Client Credentials authentication via Spotipy is sufficient - no user OAuth flow is needed.
 
 4. **SQLite for Simplicity**: SQLite provides zero-configuration local storage suitable for a single-writer weekly pipeline. Historical data accumulates in a single file, simplifying backup to S3.
 
@@ -51,10 +51,10 @@ flowchart LR
 ### Pipeline Flow
 
 1. **Scheduler** (GitHub Actions) triggers every Monday at 08:00 UTC
-2. **Extract** — Spotipy fetches playlist tracks, audio features, and artist metadata
-3. **Transform** — Pandas normalizes schemas, joins data, classifies track status
-4. **Load** — SQLite receives transformed data; database file is uploaded to S3
-5. **Dashboard** — Streamlit reads SQLite and renders interactive visualizations
+2. **Extract** - Spotipy fetches playlist tracks, audio features, and artist metadata
+3. **Transform** - Pandas normalizes schemas, joins data, classifies track status
+4. **Load** - SQLite receives transformed data; database file is uploaded to S3
+5. **Dashboard** - Streamlit reads SQLite and renders interactive visualizations
 
 ### Module Responsibilities
 
@@ -169,10 +169,10 @@ def get_previous_weeks_data(conn: sqlite3.Connection, region: str, n_weeks: int 
 
 The Streamlit dashboard exposes four main views plus shared filters:
 
-1. **Global vs Regional Chart Comparison** — Cross-market track overlap
-2. **Audio Feature Breakdown** — Aggregated audio features for top tracks
-3. **Artist Popularity Trends** — Time-series popularity lines
-4. **Rising vs Falling Tracks** — Track status classification view
+1. **Global vs Regional Chart Comparison** - Cross-market track overlap
+2. **Audio Feature Breakdown** - Aggregated audio features for top tracks
+3. **Artist Popularity Trends** - Time-series popularity lines
+4. **Rising vs Falling Tracks** - Track status classification view
 
 Shared sidebar filters: Region multi-select, date range picker, genre multi-select.
 
@@ -213,11 +213,11 @@ CREATE TABLE IF NOT EXISTS artists (
 
 ### In-Memory Data Representations (Pandas DataFrames)
 
-**Charts DataFrame** — columns: `week`, `region`, `rank`, `track_id`, `track_name`, `artist_id`, `track_status`
+**Charts DataFrame** - columns: `week`, `region`, `rank`, `track_id`, `track_name`, `artist_id`, `track_status`
 
-**Audio Features DataFrame** — columns: `track_id`, `energy`, `tempo`, `danceability`, `valence`, `acousticness`, `popularity`
+**Audio Features DataFrame** - columns: `track_id`, `energy`, `tempo`, `danceability`, `valence`, `acousticness`, `popularity`
 
-**Artists DataFrame** — columns: `artist_id`, `name`, `genres`, `followers`, `popularity`
+**Artists DataFrame** - columns: `artist_id`, `name`, `genres`, `followers`, `popularity`
 
 ### Data Flow Between Stages
 

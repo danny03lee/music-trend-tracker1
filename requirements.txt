@@ -1,5 +1,8 @@
-requests
-pandas
-boto3
+spotipy
 streamlit
+pandas
+python-dotenv
+plotly
+pillow
+requests
 pytest
